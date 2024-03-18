@@ -3,6 +3,7 @@ import path from 'path'
 import axios from 'axios'
 import * as core from '@actions/core'
 import {
+  AllResult,
   CPUStats,
   DiskStats,
   GraphResponse,
@@ -34,7 +35,7 @@ async function triggerStatCollect(): Promise<void> {
   }
 }
 
-async function reportWorkflowMetrics(): Promise<string> {
+async function reportWorkflowMetrics(): Promise<AllResult> {
   const theme: string = core.getInput('theme', { required: false })
   let axisColor = BLACK
   switch (theme) {
@@ -52,6 +53,17 @@ async function reportWorkflowMetrics(): Promise<string> {
   const { activeMemoryX, availableMemoryX } = await getMemoryStats()
   const { networkReadX, networkWriteX } = await getNetworkStats()
   const { diskReadX, diskWriteX } = await getDiskStats()
+
+  const rawStats = {
+    "userLoad": userLoadX,
+    "systemLoad": systemLoadX,
+    "activeMemory": activeMemoryX,
+    "availableMemory": availableMemoryX,
+    "networkRead": networkReadX,
+    "networkWrite": networkWriteX,
+    "diskRead": diskReadX,
+    "diskWrite": diskWriteX
+  }
 
   const cpuLoad =
     userLoadX && userLoadX.length && systemLoadX && systemLoadX.length
@@ -180,8 +192,8 @@ async function reportWorkflowMetrics(): Promise<string> {
       `| Disk I/O      | ![${diskIORead.id}](${diskIORead.url})              | ![${diskIOWrite.id}](${diskIOWrite.url})              |`
     )
   }
-
-  return postContentItems.join('\n')
+  const graph = postContentItems.join('\n')
+  return { graph, rawStats }
 }
 
 async function getCPUStats(): Promise<ProcessedCPUStats> {
@@ -366,11 +378,11 @@ export async function start(): Promise<boolean> {
 
   try {
     let metricFrequency = 0
-    const metricFrequencyInput: string = core.getInput('metric_frequency')
+    const metricFrequencyInput: string = core.getInput('metric_frequency_thousands_of_second')
     if (metricFrequencyInput) {
       const metricFrequencyVal: number = parseInt(metricFrequencyInput)
       if (Number.isInteger(metricFrequencyVal)) {
-        metricFrequency = metricFrequencyVal * 1000
+        metricFrequency = metricFrequencyVal
       }
     }
 
@@ -421,15 +433,15 @@ export async function finish(currentJob: WorkflowJobType): Promise<boolean> {
 
 export async function report(
   currentJob: WorkflowJobType
-): Promise<string | null> {
+): Promise<AllResult | null> {
   logger.info(`Reporting stat collector result ...`)
 
   try {
-    const postContent: string = await reportWorkflowMetrics()
+    const result = await reportWorkflowMetrics()
 
     logger.info(`Reported stat collector result`)
 
-    return postContent
+    return result
   } catch (error: any) {
     logger.error('Unable to report stat collector result')
     logger.error(error)

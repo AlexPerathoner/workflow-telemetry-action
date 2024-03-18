@@ -1,11 +1,13 @@
 import * as core from '@actions/core'
 import * as github from '@actions/github'
 import { Octokit } from '@octokit/action'
+import * as artifact from '@actions/artifact'
 import * as stepTracer from './stepTracer'
 import * as statCollector from './statCollector'
 import * as processTracer from './processTracer'
 import * as logger from './logger'
-import { WorkflowJobType } from './interfaces'
+import { AllResult, RawStats, WorkflowJobType } from './interfaces'
+import * as fs from 'fs'
 
 const { pull_request } = github.context.payload
 const { workflow, job, repo, runId, sha } = github.context
@@ -58,6 +60,60 @@ async function getCurrentJob(): Promise<WorkflowJobType | null> {
     )
   }
   return null
+}
+
+async function saveStatsToJsonFile(
+  currentJob: WorkflowJobType,
+  content: RawStats
+): Promise<void> {
+  const statsJsonFilePath = core.getInput('stats_json_file_path')
+  if (statsJsonFilePath) {
+    let newContent: { [timestamp: string]: {
+      isoString: string,
+      userLoad: number,
+      systemLoad: number,
+      totalLoad: number,
+      activeMemory: number,
+      availableMemory: number,
+      networkRead: number,
+      networkWrite: number,
+      diskRead: number,
+      diskWrite: number} } = {}
+    let minX = Math.min(content.userLoad.length, content.systemLoad.length, content.activeMemory.length, content.availableMemory.length, content.networkRead.length, content.networkWrite.length, content.diskRead.length, content.diskWrite.length)
+    for (let i = 0; i < minX; i++) {
+      const timestamp = content.userLoad[i].x
+      const formattedTime = new Date(timestamp).toISOString()
+      newContent[timestamp] = {
+        isoString: formattedTime,
+        userLoad: content.userLoad[i].y,
+        systemLoad: content.systemLoad[i].y,
+        totalLoad: content.userLoad[i].y + content.systemLoad[i].y,
+        activeMemory: content.activeMemory[i].y,
+        availableMemory: content.availableMemory[i].y,
+        networkRead: content.networkRead[i].y,
+        networkWrite: content.networkWrite[i].y,
+        diskRead: content.diskRead[i].y,
+        diskWrite: content.diskWrite[i].y
+      }
+    }
+    logger.info(`Saving stats to file: ${statsJsonFilePath}`)
+    await fs.writeFile(statsJsonFilePath, JSON.stringify(newContent), (err) => {
+      if (err) {
+        logger.error(`Error saving stats to file: ${err}`)
+      }
+    })
+    const artifactClient = artifact.create()
+    const artifactName = 'raw-stats';
+    const files = [statsJsonFilePath]
+    const rootDirectory = '.';
+    const options = {
+      continueOnError: false
+    }
+    const uploadResponse = await artifactClient.uploadArtifact(artifactName, files, rootDirectory, options)
+    logger.info(`Artifact upload response: ${JSON.stringify(uploadResponse)}`)
+  } else {
+    logger.info(`No stats_json_file_path input provided. Skipping saving stats to file.`)
+  }
 }
 
 async function reportAll(
@@ -136,7 +192,7 @@ async function run(): Promise<void> {
     // Report step tracer
     const stepTracerContent: string | null = await stepTracer.report(currentJob)
     // Report stat collector
-    const stepCollectorContent: string | null = await statCollector.report(
+    const stepCollectorContent: AllResult | null = await statCollector.report(
       currentJob
     )
     // Report process tracer
@@ -150,13 +206,16 @@ async function run(): Promise<void> {
       allContent = allContent.concat(stepTracerContent, '\n')
     }
     if (stepCollectorContent) {
-      allContent = allContent.concat(stepCollectorContent, '\n')
+      allContent = allContent.concat(stepCollectorContent.graph, '\n')
     }
     if (procTracerContent) {
       allContent = allContent.concat(procTracerContent, '\n')
     }
 
     await reportAll(currentJob, allContent)
+    if (stepCollectorContent) {
+      await saveStatsToJsonFile(currentJob, stepCollectorContent.rawStats)
+    }
 
     logger.info(`Finish completed`)
   } catch (error: any) {

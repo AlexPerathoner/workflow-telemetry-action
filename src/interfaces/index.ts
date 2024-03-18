@@ -64,6 +64,13 @@ export interface LineGraphOptions {
   }
 }
 
+export interface RawStats { userLoad: ProcessedStats[]; systemLoad: ProcessedStats[]; activeMemory: ProcessedStats[]; availableMemory: ProcessedStats[]; networkRead: ProcessedStats[]; networkWrite: ProcessedStats[]; diskRead: ProcessedStats[]; diskWrite: ProcessedStats[]; }
+
+export interface AllResult {
+  graph: string
+  rawStats: RawStats
+}
+
 export interface StackedArea {
   readonly label: string
   readonly color: string

@@ -5808,6 +5808,16 @@ function reportWorkflowMetrics() {
         const { activeMemoryX, availableMemoryX } = yield getMemoryStats();
         const { networkReadX, networkWriteX } = yield getNetworkStats();
         const { diskReadX, diskWriteX } = yield getDiskStats();
+        const rawStats = {
+            "userLoad": userLoadX,
+            "systemLoad": systemLoadX,
+            "activeMemory": activeMemoryX,
+            "availableMemory": availableMemoryX,
+            "networkRead": networkReadX,
+            "networkWrite": networkWriteX,
+            "diskRead": diskReadX,
+            "diskWrite": diskWriteX
+        };
         const cpuLoad = userLoadX && userLoadX.length && systemLoadX && systemLoadX.length
             ? yield getStackedAreaGraph({
                 label: 'CPU Load (%)',
@@ -5907,7 +5917,8 @@ function reportWorkflowMetrics() {
         if (diskIORead && diskIOWrite) {
             postContentItems.push(`| Disk I/O      | ![${diskIORead.id}](${diskIORead.url})              | ![${diskIOWrite.id}](${diskIOWrite.url})              |`);
         }
-        return postContentItems.join('\n');
+        const graph = postContentItems.join('\n');
+        return { graph, rawStats };
     });
 }
 function getCPUStats() {
@@ -6066,11 +6077,11 @@ function start() {
         logger.info(`Starting stat collector ...`);
         try {
             let metricFrequency = 0;
-            const metricFrequencyInput = core.getInput('metric_frequency');
+            const metricFrequencyInput = core.getInput('metric_frequency_thousands_of_second');
             if (metricFrequencyInput) {
                 const metricFrequencyVal = parseInt(metricFrequencyInput);
                 if (Number.isInteger(metricFrequencyVal)) {
-                    metricFrequency = metricFrequencyVal * 1000;
+                    metricFrequency = metricFrequencyVal;
                 }
             }
             const child = (0, child_process_1.spawn)(process.argv[0], [path_1.default.join(__dirname, '../scw/index.js')], {
@@ -6113,9 +6124,9 @@ function report(currentJob) {
     return __awaiter(this, void 0, void 0, function* () {
         logger.info(`Reporting stat collector result ...`);
         try {
-            const postContent = yield reportWorkflowMetrics();
+            const result = yield reportWorkflowMetrics();
             logger.info(`Reported stat collector result`);
-            return postContent;
+            return result;
         }
         catch (error) {
             logger.error('Unable to report stat collector result');

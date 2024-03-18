@@ -1,4 +1,4 @@
-name: "Workflow Telemetry"
+name: "Workflow Telemetry Save File"
 description: "Workflow Telemetry"
 author: "Serkan Özal <serkan@thundra.io>"
 inputs:
@@ -6,9 +6,9 @@ inputs:
     description: "GitHub API Access Token"
     default: ${{ github.token }}
     required: false
-  metric_frequency:
+  metric_frequency_thousands_of_second:
     description: "Metric collection frequency in seconds. Must be a number. Defaults to '5'."
-    default: 5
+    default: 200
     required: false
   proc_trace_min_duration:
     description: "Puts minimum limit for process execution duration to be traced. Must be a number. Defaults to '-1' which means process duration filtering is not applied."
@@ -41,6 +41,10 @@ inputs:
   theme:
     description: "Set to `dark` to generate charts compatible with Github dark mode. Defaults to 'light'."
     default: "light"
+    required: false
+  stats_json_file_path:
+    description: "Path of the file to save the collected stats in JSON format. Defaults to 'raw-stats.json'."
+    default: "raw-stats.json"
     required: false
 
 runs:
